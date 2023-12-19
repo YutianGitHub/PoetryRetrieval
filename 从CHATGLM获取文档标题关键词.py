@@ -26,18 +26,54 @@ prompt = """
 
 以下是原文：
 {content}
-
 """
 
 poets1 = CSVLoader(file_path="4个数据集/poets_3154_copy.csv", encoding="utf-8").load()
 poets2 = CSVLoader(file_path="4个数据集/poets_contents_3154.csv", encoding="utf-8").load()
 
-poets1_long = [p for p in poets1 if p.page_content.__len__() >= 128]
-poets2_long = [p for p in poets2 if p.page_content.__len__() >= 128]
-chunks = util.chunks(poets1_long, batch_size=3)
+
+poets2_1 = []
+import re
+pattern = re.compile(r'诗人: ([\u4e00-\u9fa5]+)\n')
+
+spliter = RecursiveCharacterTextSplitter(
+    chunk_size = 512,
+    chunk_overlap  = 64,
+    length_function = len,
+    is_separator_regex = True,
+    separators=[u"\n([\u4e00-\u9fa5]+)\n","\n\n","\n"," ",""]
+)
+
+for p in tqdm.tqdm(poets2,total=len(poets2)):
+    content = p.page_content
+
+    match = pattern.search(content)
+    if match:
+        name = match.group(1)
+    else:
+        print(f"not find name:{content[0:20]}")
+        continue
+
+    head = f"诗人：{name}的生平片段"
+    if len(content)<=500:
+        poets2_1.append(head+content)
+    else:
+        texts = spliter.split_text(content)
+        for i,text in enumerate(texts):
+            poets2_1.append(head+f"{i+1}：\n"+text)
+
+
+
+
+# poets1_long = [p for p in poets1 if p.page_content.__len__() >= 128]
+# poets2_long = [p for p in poets2 if p.page_content.__len__() >= 128]
+chunks = util.chunks(poets2_1[0:30], batch_size=3)
+
+
 res = []
 count = 1
-for batch in tqdm.tqdm(chunks, total=len(poets1_long) // 3):
+for batch in tqdm.tqdm(chunks, total=len(poets2_1) // 3):
+
     with concurrent.futures.ThreadPoolExecutor() as executor:
         # 调用你的函数，并传入不同的参数
         # 这里的参数可以是不同的消息、历史记录等
@@ -50,9 +86,12 @@ for batch in tqdm.tqdm(chunks, total=len(poets1_long) // 3):
         for i, future in enumerate(concurrent.futures.as_completed(futures)):
             try:
                 # 获取函数的返回值
+
+                # 关键问题：返回顺序不一定一致！
+                
                 result = future.result()
                 res.append(result[1] + "\n\n" + batch[i].page_content)
                 print(f"Count:{count},Result: {result}")
             except Exception as e:
                 print(f"Error: {e}")
-        time.sleep(1)
+        time.sleep(2)
