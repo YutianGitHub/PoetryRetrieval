@@ -5,10 +5,12 @@ import itertools
 import numpy as np
 import pandas as pd
 import tqdm
+import zhipuai
 from matplotlib import pyplot as plt
 from concurrent.futures import ThreadPoolExecutor
 import ast
 from numpy.linalg import norm
+zhipuai.api_key = "7cdeb7f014f39871caac51994948707d.C3tQB414seOfHgfC"
 
 def get_all_files_in_directory(directory: str, rules=lambda x: True) -> List[AnyStr]:
     """
@@ -132,13 +134,14 @@ def str2dict(s: AnyStr) -> Dict:
     :param s:
     :return:
     """
-    if isinstance(s,Dict):
+    if isinstance(s, Dict):
         return s
     return ast.literal_eval(s)
 
-def len_object(d:Any)->int:
+
+def len_object(d: Any) -> int:
     s = 0
-    if isinstance(d,int):
+    if isinstance(d, int):
         return 1
     if not isinstance(d, dict):
         return len(str(d))
@@ -148,7 +151,54 @@ def len_object(d:Any)->int:
 
 
 def cosine_similarity(a, b):
-    return np.dot(a, b)/(norm(a)*norm(b))
+    return np.dot(a, b) / (norm(a) * norm(b))
 
-def dot_product(a,b):
-    return np.dot(a,b)
+
+def dot_product(a, b):
+    return np.dot(a, b)
+
+
+async def asyncChatChatGLM(message, history, temp=0.95, top_p=0.7, tag=0)->Tuple:
+    history_glm_format = []
+    for human, assistant in history:
+        history_glm_format.append({"role": "user", "content": human})
+        history_glm_format.append({"role": "assistant", "content": assistant})
+    history_glm_format.append({"role": "user", "content": message})
+
+    responses = zhipuai.model_api.sse_invoke(
+        model="chatglm_turbo",
+        prompt=history_glm_format,
+        temperature=temp,
+        top_p=top_p,
+        incremental=True
+    )
+
+    buffer = ""
+    for event in responses.events():
+        buffer += event.data
+        if event.event == "finish":
+            print(f"tag:{tag} finish.")
+    return tag, buffer
+
+
+def syncChatChatGLM(message, history, temp=0.95, top_p=0.7, tag=0)->Tuple:
+    history_glm_format = []
+    for human, assistant in history:
+        history_glm_format.append({"role": "user", "content": human})
+        history_glm_format.append({"role": "assistant", "content": assistant})
+    history_glm_format.append({"role": "user", "content": message})
+
+    responses = zhipuai.model_api.sse_invoke(
+        model="chatglm_turbo",
+        prompt=history_glm_format,
+        temperature=temp,
+        top_p=top_p,
+        incremental=True
+    )
+
+    buffer = ""
+    for event in responses.events():
+        buffer += event.data
+        if event.event == "finish":
+            print(f"tag:{tag} finish.")
+    return tag, buffer
