@@ -1,7 +1,6 @@
-import asyncio
 import importlib
 import time
-
+import re
 from langchain.document_loaders.csv_loader import CSVLoader
 from langchain.embeddings import HuggingFaceEmbeddings
 
@@ -30,10 +29,9 @@ prompt = """
 
 poets1 = CSVLoader(file_path="4个数据集/poets_3154_copy.csv", encoding="utf-8").load()
 poets2 = CSVLoader(file_path="4个数据集/poets_contents_3154.csv", encoding="utf-8").load()
-
-
+poets1_1 = []
 poets2_1 = []
-import re
+
 pattern = re.compile(r'诗人: ([\u4e00-\u9fa5]+)\n')
 
 spliter = RecursiveCharacterTextSplitter(
@@ -41,57 +39,60 @@ spliter = RecursiveCharacterTextSplitter(
     chunk_overlap  = 64,
     length_function = len,
     is_separator_regex = True,
-    separators=[u"\n([\u4e00-\u9fa5]+)\n","\n\n","\n"," ",""]
+    separators=["\n\n","\n"," ",""]
 )
 
 for p in tqdm.tqdm(poets2,total=len(poets2)):
-    content = p.page_content
 
-    match = pattern.search(content)
+    match = pattern.search(p.page_content)
     if match:
         name = match.group(1)
     else:
-        print(f"not find name:{content[0:20]}")
+        print(f"\nnot find name:{p.page_content[0:20]}")
         continue
 
     head = f"诗人：{name}的生平片段"
-    if len(content)<=500:
-        poets2_1.append(head+content)
+    if len(p.page_content)<=500:
+        poets2_1.append(head+p.page_content)
     else:
-        texts = spliter.split_text(content)
+        texts = spliter.split_text(p.page_content)
         for i,text in enumerate(texts):
             poets2_1.append(head+f"{i+1}：\n"+text)
 
+print(poets2_1[1])
+
+
+shortObj = []
+iterObj = poets1
 
 
 
-# poets1_long = [p for p in poets1 if p.page_content.__len__() >= 128]
-# poets2_long = [p for p in poets2 if p.page_content.__len__() >= 128]
-chunks = util.chunks(poets2_1[0:30], batch_size=3)
+concur = 3
+res = dict()
+count = 0
+chunks = util.chunks(iterObj, batch_size=concur)
 
-
-res = []
-count = 1
-for batch in tqdm.tqdm(chunks, total=len(poets2_1) // 3):
-
+for batch in tqdm.tqdm(chunks, total=len(iterObj) // concur):
     with concurrent.futures.ThreadPoolExecutor() as executor:
         # 调用你的函数，并传入不同的参数
         # 这里的参数可以是不同的消息、历史记录等
         # 返回的futures列表包含每个调用的结果
         futures = [executor.submit(util.syncChatChatGLM,
                                    prompt.format(content=batch[tag].page_content),
-                                   [], 0.95, 0.7, count+tag) for tag in range(3)]
-        count += 3
+                                   [], 0.95, 0.7, count + tag) for tag in range(concur)]
+        for i in range(concur):
+            res[count + i] = {"文档": batch[i].page_content}
+        count += concur
         print()
         for i, future in enumerate(concurrent.futures.as_completed(futures)):
             try:
                 # 获取函数的返回值
 
                 # 关键问题：返回顺序不一定一致！
-                
+
                 result = future.result()
-                res.append(result[1] + "\n\n" + batch[i].page_content)
-                print(f"Count:{count},Result: {result}")
+                res[result[0]]["摘要"] = result[1]
+                print(f"Tag:{result[0]},Result: {result}")
             except Exception as e:
                 print(f"Error: {e}")
-        time.sleep(2)
+        time.sleep(1.2)
