@@ -3,7 +3,7 @@ import time
 import re
 from langchain.document_loaders.csv_loader import CSVLoader
 from langchain.embeddings import HuggingFaceEmbeddings
-
+from langchain.llms import ChatGLM
 import pandas as pd
 import tqdm
 import util
@@ -38,8 +38,7 @@ spliter = RecursiveCharacterTextSplitter(
     chunk_size = 512,
     chunk_overlap  = 64,
     length_function = len,
-    is_separator_regex = True,
-    separators=["\n\n","\n"," ",""]
+    is_separator_regex = False,
 )
 
 for p in tqdm.tqdm(poets2,total=len(poets2)):
@@ -52,6 +51,9 @@ for p in tqdm.tqdm(poets2,total=len(poets2)):
         continue
 
     head = f"诗人：{name}的生平片段"
+    if len(p.page_content)<=64:
+        print(f"pass:{p.page_content[0:30]}")
+        continue
     if len(p.page_content)<=500:
         poets2_1.append(head+p.page_content)
     else:
